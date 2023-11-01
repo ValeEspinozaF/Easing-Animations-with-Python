@@ -9,30 +9,49 @@ from matplotlib.patches import Polygon
 
 
 class Eased:
-    """ This class takes the original time vector and raw data (as a m*n matrix or DataFrame) along with an output vector and interpolation function
-    For the input data, the rows are the different variables and the columns correspond to the time points"""
+    """ This class takes the original time vector and raw data (as a m*n 
+    matrix or DataFrame) along with an output vector and interpolation function
+    For the input data, the rows are the different variables and the columns 
+    correspond to the time points"""
 
     def __init__(self, data, in_t=None, wrap=True, istall=False, fstall=False):
+        """
+        Create a new instance of the class Eased().
 
+        Parameters
+        ----------
+        data : TYPE
+            DESCRIPTION.
+        in_t : TYPE, optional
+            DESCRIPTION. The default is None.
+        wrap : boolean, optional
+            Tells the easer whether wrap the animation back to the intial state. 
+            The default is True.
+        istall : boolean, optional
+            Tells the easer whether to start the animation with a stall at the 
+            initial state. The default is False.
+        fstall : boolean, optional
+            Tells the easer whether to end the animation with a stall at the 
+            final state. The default is True.
+            
+        Returns
+        -------
+        None.
+
+        """
         
         if isinstance(data, pd.DataFrame):
             
-            if in_t is None:
-                in_t = np.arange(len(data.index.values)-1)     
-            
-            
-            labels = data.index.values
-            
-            
-            #self.labels = np.append(data.index.values,np.array([data.index.values[0],data.index.values[0]]))
             self.columns = data.columns
+            
+            if in_t is None:
+                in_t = np.arange(len(data.index.values))     
+            
+            
+            labels = data.index.values[in_t]
             data = data.values
             
-            #n_dims = data.shape[1]
-            #self.data = np.vstack((data.values,data.values[0,:]))
-            #self.n_dims = data.shape[1]
-            
-            
+        
         elif isinstance(data, np.ndarray):
             
             if in_t is None:
@@ -43,20 +62,18 @@ class Eased:
         else:
             print('\033[91m' + "Data is unrecognized type : must be either a numpy Array or pandas DataFrame")
         
+        
         if wrap:
             in_t = np.append(in_t, in_t[:1])
             labels = np.append(labels, labels[:1])
-            data = np.vstack((data, data[0,:]))
             
         if istall:
             in_t = np.append(in_t[:1], in_t)
             labels = np.append(labels[:1], labels)
-            data = np.vstack((data[0,:], data))
             
         if fstall:
             in_t = np.append(in_t, in_t[-1:])
             labels = np.append(labels, labels[-1:])
-            data = np.vstack((data, data[-1,:]))
             
             
         self.labels = labels
@@ -65,61 +82,71 @@ class Eased:
         self.data = data
         
 
-    def No_interp(self, smoothness=10):
-        out_t=np.linspace(min(self.int_t),max(self.int_t),len(self.int_t)*smoothness)
-        self.n_steps = int(np.ceil(len(out_t) / len(self.int_t)))
-        self.out_t = out_t
+    def no_ease(self, fpt=10): # not sure how to replace fpt and keep the time stretch
+        """
+        Maps the input vector over the outuput time vector without interpolation.
 
-        #This Function maps the input vecotor over the outuput time vector without interoplation
+        Parameters
+        ----------
+        fpt : integer, optional
+            Number of frames per transition. The default is 10.
+
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
+        
+        n_frames = len(self.int_t)*fpt
+        self.n_frames = n_frames
+        self.n_steps = int( np.ceil(self.n_frames / len(self.int_t)) )
+
+
         if self.n_dims == 1: # if the input is only one row
-            self.eased = np.zeros((self.out_t, 1))
-            for i, t in enumerate(self.out_t):
+            self.eased = np.zeros((self.n_frames, 1))
+            
+            for i, t in enumerate(self.n_frames):
                 self.eased[i] = self.data[int(np.floor(i / self.n_steps))]
-        else: #if the input is a multidimensional row
-            self.eased = np.zeros((np.shape(self.data)[0], self.out_t))
+                
+        else: # if the input is a multidimensional row
+            self.eased = np.zeros((np.shape(self.data)[0], self.n_frames))
+            
             for z in range(np.shape(self.data)[0]):
-                for i, t in enumerate(self.out_t):
+                
+                for i, t in enumerate(self.n_frames):
                     self.eased[z, i] = self.data[z, int(np.floor(i / self.n_steps))]
 
         return self.eased
 
 
-    def power_ease(self, n, smoothness=10):
+    def power_ease(self, n, fpt=10):
         """
         Takes care of interpolating (easing) the coordinates according to the 
-        given smoothness.
+        given fpt.
 
         Parameters
         ----------
-        n : TYPE
-            DESCRIPTION.
-        smoothness : TYPE, optional
-            DESCRIPTION. The default is 10.
-        wrap : bool, optional
-            Tells the easer whether wrap the animation back to the intial state. 
-            The default is True.
-        istall : bool, optional
-            Tells the easer whether to start the animation with a stall at the 
-            initial state. The default is False.
-        fstall : boll, optional
-            Tells the easer whether to end the animation with a stall at the 
-            final state. The default is True.
+        n : integer
+            Exponent of the power smoothing.
+        fpt : integer, optional
+            Number of frames per transition. The default is 10.
 
         Returns
         -------
-        TYPE
-            self.eased, an array of floats with states as rows and x- and y-
+        Array of floats
+            An array of floats with states(frames) as rows and x- and y-
             coordinates for each point as columns.
 
         """
         
-        out_t = len(self.int_t)*smoothness
-        self.out_t = out_t
-        self.n_steps = int( np.ceil(self.out_t / len(self.int_t)) )
+        n_frames = (len(self.int_t)-1) * fpt
+        self.n_frames = n_frames
+        self.n_steps = int( np.ceil(self.n_frames / (len(self.int_t)-1)) )
         
         sign = n % 2 * 2
         if self.n_dims == 1:
-            self.eased = np.zeros((self.out_t, 1))
+            self.eased = np.zeros((self.n_frames, 1))
             j = 0
             for i in range(len(self.int_t) - 1):
 
@@ -138,13 +165,13 @@ class Eased:
             self.eased[j:] = self.data[i + 1]
 
         else:
-            self.eased = np.zeros( (self.out_t, np.shape(self.data)[1]) )
-            for z in range(np.shape(self.data)[1]):
+            self.eased = np.zeros( (self.n_frames, np.shape(self.data)[1]) )
+            for z in range(np.shape(self.data)[1]): 
                 j = 0
                 
-                for i in range(len(self.int_t)):
-                    start = self.data[i, z]
-                    end = self.data[i + 1, z]
+                for i in range(len(self.int_t)-1): 
+                    start = self.data[self.int_t[i], z]
+                    end = self.data[self.int_t[i + 1], z]
                     
                     for t in np.linspace(0, 2, self.n_steps):
                         if (t < 1):
@@ -161,7 +188,7 @@ class Eased:
         return self.eased
 
 
-    def scatter_animation2d(self,n=3,smoothness=30,speed=1.0,gif=False,destination=None,plot_kws=None,label=False):
+    def scatter_animation2d(self, n=3, fpt=30, speed=1.0, gif=False, destination=None,plot_kws=None,label=False):
         """
         Flexibly create a 2d scatter plot animation.
 
@@ -178,7 +205,7 @@ class Eased:
         Parameters
         ----------
         n: Exponent of the power smoothing
-        smoothness: how smooth the frames of the animation are
+        fpt: how smooth the frames of the animation are
         speed: speed
         inline:
         gif:
@@ -192,14 +219,14 @@ class Eased:
             print('\033[91m' + "Failed: Data must have an even number of columns")
             exit()
         if np.shape(self.data)[0]<np.shape(self.data)[1]:
-            print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)")
+            print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)") 
 
 
         if plot_kws is None:
             plot_kws = dict()
 
 
-        it_data=self.power_ease(n,smoothness)
+        it_data = self.power_ease(n,fpt)
 
         # filling out missing keys
         vanilla_params={'s':10,'color':'black','xlim':[np.min(it_data)-1, np.max(it_data)+1],'ylim':[np.min(it_data)-1,np.max(it_data)+1],'xlabel':'','ylabel':'','alpha':1.0,'figsize':(6,6)}
@@ -229,12 +256,12 @@ class Eased:
             for i in range(n_dots):
                 dots[i][0].set_data(it_data[z,i*2],it_data[z,i*2+1])
             if label==True:
-                label_text.set_text(self.labels[int(np.floor((z+smoothness/2)/smoothness))])
+                label_text.set_text(self.labels[int(np.floor((z+fpt/2)/fpt))])
                 return dots,label_text
             else:
                 return dots
 
-        anim = animation.FuncAnimation(fig, animate, frames=self.out_t,interval=400/smoothness/speed, blit=False)
+        anim = animation.FuncAnimation(fig, animate, frames=self.n_frames,interval=400/fpt/speed, blit=False)
 
 
         if destination is not None:
@@ -242,7 +269,7 @@ class Eased:
                 writer = animation.writers['ffmpeg'](fps=60)
                 anim.save(destination, writer=writer, dpi=100)
             if destination.split('.')[-1]=='gif':
-                anim.save(destination, writer='imagemagick', fps=smoothness)
+                anim.save(destination, writer='imagemagick', fps=fpt)
 
         if gif==True:
             return Image(url='animation.gif')
@@ -250,41 +277,54 @@ class Eased:
             return anim
 
 
-    def polygon_animation2d(self, n=3, smoothness=30, speed=1.0, 
-                            gif=False, destination=None, plot_kws=None, label=False
-                            ):
+    def polygon_animation2d(self, n=3, fpt=30, speed=1.0, ease_method='power_ease',
+                            gif=False, destination=None, plot_kws=None, label=False):
         """
         Create a 2d polygon plot animation.
 
-        This function creates a matplotlib animation from a pandas Dataframe or a MxN numpy array. The Columns are paired
-        with x and y coordinates while the rows are the individual time points.
+        This function creates a matplotlib animation from a pandas Dataframe or 
+        a MxN numpy array. The columns are paired with x- and y-coordinates 
+        while the rows are the individual time points.
         
-        If a DataFrame is passed, the data columns are expected to have the xy values for each point stacked in pairs.
-        You would get that from e.g.: w=np.random.multivariate_normal([1,1],[[4, 2], [2, 4]],size=size).reshape(1,-1)
+        If a DataFrame is passed, the data columns are expected to have the xy 
+        values for each point stacked in pairs. You would get that from e.g.: 
+        w = np.random.multivariate_normal([1,1],[[4, 2], [2, 4]],size=size).reshape(1,-1)
         where sampling is done for both axis in the same call.
-
-        This takes a number of parameters for the animation, as well as
 
 
         Parameters
         ----------
-        n: Exponent of the power smoothing
-        smoothness: how smooth the frames of the animation are
-        speed: speed
-        gif:
-        destination:
-        plot_kws:
-        label:
-        :return:
-        """
+        n : integer
+            Exponent of the power smoothing. The default is 3.
+        fpt : integer, optional
+            Number of frames per transition. The default is 30.
+        speed : float, optional
+            DESCRIPTION. The default is 1.0.
+        ease_method : string, optional
+            Smooting method to be used. The default is 'power_ease'.
+        gif : boolean, optional
+            DESCRIPTION. The default is False.
+        destination : string, optional
+            Output path for the animation. The default is None.
+        plot_kws : dictionary, optional
+            Plotting keywords. The default is None.
+        label : boolean, optional
+            True for plotting labels in the plot. Labels can only be taken from
+            the keys of the dictionary passed as data. The default is False.
 
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
 
         #Running checks on data for mishappen arrays.
         if np.shape(self.data)[1]%2!=0:
             print('\033[91m' + "Failed: Data must have an even number of columns")
             exit()
         if np.shape(self.data)[0]<np.shape(self.data)[1]:
-            print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)")
+            print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)") # !!! when is this relevant
 
 
         if plot_kws is None:
@@ -292,11 +332,22 @@ class Eased:
 
 
         # Ease data
-        it_data = self.power_ease(n, smoothness)
+        if ease_method == "power_ease":
+            it_data = self.power_ease(n, fpt)
+            
 
         # Fill missing plotting keywords (otherwise given in plot_kws)
         # !!! update with concerning keywords
-        vanilla_params={'s':10,'color':'black','xlim':[np.min(it_data)-1, np.max(it_data)+1],'ylim':[np.min(it_data)-1,np.max(it_data)+1],'xlabel':'','ylabel':'','alpha':1.0,'figsize':(6,6)}
+        # !!! Should perhaps divide into plot kws and polygon kws.
+        vanilla_params={'color':'black',
+                        'xlim':[np.min(it_data)-1, np.max(it_data)+1],
+                        'ylim':[np.min(it_data)-1,np.max(it_data)+1],
+                        'xlabel':'',
+                        'ylabel':'',
+                        'alpha':1.0,
+                        'figsize':(6,6),
+                        }
+        
         for key in vanilla_params.keys():
             if key not in plot_kws.keys():
                 plot_kws[key] = vanilla_params[key]
@@ -326,12 +377,13 @@ class Eased:
             poly.set_xy(dots)
             
             if label==True:
-                label_text.set_text(self.labels[int(np.floor((z+smoothness/2)/smoothness))])  #!!! This will only work for DataFrames I think
+                label_text.set_text(self.labels[int(np.floor((z+fpt/2)/fpt))])  #!!! This will only work for DataFrames I think
                 return poly,label_text
             else:
                 return poly
 
-        anim = animation.FuncAnimation(fig, animate, frames=self.out_t,interval=400/smoothness/speed, blit=False)
+        anim = animation.FuncAnimation(fig, animate, frames=self.n_frames, 
+                                       interval=400/fpt/speed, blit=False)
 
 
         if destination is not None:
@@ -339,7 +391,7 @@ class Eased:
                 writer = animation.writers['ffmpeg'](fps=60)
                 anim.save(destination, writer=writer, dpi=100)
             if destination.split('.')[-1]=='gif':
-                anim.save(destination, writer='imagemagick', fps=smoothness)
+                anim.save(destination, writer='imagemagick', fps=fpt)
 
         if gif==True:
             return Image(url='animation.gif')
@@ -348,13 +400,13 @@ class Eased:
 
 
 
-    def barchart_animation(self,n=3,smoothness=30,speed=1.0,gif=False,destination=None,plot_kws=None,label=False,zero_edges=True,loop=True):
+    def barchart_animation(self,n=3,fpt=30,speed=1.0,gif=False,destination=None,plot_kws=None,label=False,zero_edges=True,loop=True):
         '''
         This barchart animation create line barcharts that morph over time using the eased data class
 
         It takes the following additional arguments
         :param n: this is the power curve modifier to passed to power_ease
-        :param smoothness: this is a rendering parameter that determines the relative framerate over the animation
+        :param fpt: this is a rendering parameter that determines the relative framerate over the animation
         :param speed: How quickly does the animation unfold // a value of 1 indicates the default [R>0]
 
         :param destination: This is the output file (if none it will be displayed inline for jupyter notebooks) - extension determines filetype
@@ -368,7 +420,7 @@ class Eased:
 
 
 
-        it_data = self.power_ease(n, smoothness)
+        it_data = self.power_ease(n, fpt)
 
         x_vect=np.arange(len(self.columns))
 
@@ -414,13 +466,13 @@ class Eased:
             lines[0][0].set_data(x_vect, it_data[z, :])
 
             if label==True:
-                label_text.set_text(self.labels[int(np.floor((z+smoothness/2)/smoothness))])
+                label_text.set_text(self.labels[int(np.floor((z+fpt/2)/fpt))])
                 return lines,label_text
             else:
                 return lines
 
 
-        anim = animation.FuncAnimation(fig, animate, frames=it_data.shape[0],interval=400/smoothness/speed, blit=False)
+        anim = animation.FuncAnimation(fig, animate, frames=it_data.shape[0],interval=400/fpt/speed, blit=False)
 
 
         if destination is not None:
@@ -428,7 +480,7 @@ class Eased:
                 writer = animation.writers['ffmpeg'](fps=60)
                 anim.save(destination, writer=writer, dpi=100)
             if destination.split('.')[-1]=='gif':
-                anim.save(destination, writer='imagemagick', fps=smoothness)
+                anim.save(destination, writer='imagemagick', fps=fpt)
 
         if gif==True:
             return Image(url='animation.gif')
@@ -438,7 +490,7 @@ class Eased:
     def timeseries_animation(self,n=1,speed=1.0,interp_freq=0,starting_pos = 25,gif=False,destination=None,plot_kws=None,final_dist=False):
         '''
         This method creates a timeseiers animation of ergodic processes
-        :param smoothness:
+        :param fpt:
         :param speed:
         :param interp_freq: This is the number of steps between each given datapoint interp_freq=1 // no additional steps
         :param gif:
@@ -451,7 +503,7 @@ class Eased:
         '''
         interp_freq+=1
 
-        data = self.power_ease(n=n, smoothness=interp_freq)
+        data = self.power_ease(n=n, fpt=interp_freq)
 
         assert min(data.shape)==1, "timeseries animation only take 1 dimensional arrays"
 
@@ -539,8 +591,5 @@ class Eased:
 
 
 if __name__ == "__main__":
+    
     print('EASING : A library for smooth animations in python : version 0.1.0')
-    # simple example : one point moving over time
-    # data = np.random.random((10, 2))
-    # Eased(data).scatter_animation2d(n=3, speed=0.5, destination='media/singlepoint.gif')
-
