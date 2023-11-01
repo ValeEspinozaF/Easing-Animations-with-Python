@@ -12,40 +12,71 @@ class Eased:
     """ This class takes the original time vector and raw data (as a m*n matrix or DataFrame) along with an output vector and interpolation function
     For the input data, the rows are the different variables and the columns correspond to the time points"""
 
-    def __init__(self, data, data_y=None, in_t=None):
+    def __init__(self, data, in_t=None, wrap=True, istall=False, fstall=False):
 
+        
         if isinstance(data, pd.DataFrame):
-            self.labels = np.append(data.index.values,np.array([data.index.values[0],data.index.values[0]]))
-            self.int_t = np.arange(len(self.labels)-1)
-
-
-            self.data = np.vstack((data.values,data.values[0,:]))
-            self.n_dims = data.shape[1]
+            
+            if in_t is None:
+                in_t = np.arange(len(data.index.values)-1)     
+            
+            
+            labels = data.index.values
+            
+            
+            #self.labels = np.append(data.index.values,np.array([data.index.values[0],data.index.values[0]]))
             self.columns = data.columns
+            data = data.values
+            
+            #n_dims = data.shape[1]
+            #self.data = np.vstack((data.values,data.values[0,:]))
+            #self.n_dims = data.shape[1]
+            
+            
         elif isinstance(data, np.ndarray):
+            
             if in_t is None:
                 in_t = np.arange(np.shape(data)[0])
-                print("No time vector included - defaulting to number of rows")
+                
+            labels = [""] * len(in_t) # with new approach, otherwise +1
 
-            self.int_t = in_t
-            self.data = data
-            self.n_dims = len(np.shape(data))
         else:
             print('\033[91m' + "Data is unrecognized type : must be either a numpy Array or pandas DataFrame")
+        
+        if wrap:
+            in_t = np.append(in_t, in_t[:1])
+            labels = np.append(labels, labels[:1])
+            data = np.vstack((data, data[0,:]))
+            
+        if istall:
+            in_t = np.append(in_t[:1], in_t)
+            labels = np.append(labels[:1], labels)
+            data = np.vstack((data[0,:], data))
+            
+        if fstall:
+            in_t = np.append(in_t, in_t[-1:])
+            labels = np.append(labels, labels[-1:])
+            data = np.vstack((data, data[-1,:]))
+            
+            
+        self.labels = labels
+        self.n_dims = len(np.shape(data))
+        self.int_t = in_t
+        self.data = data
+        
 
-
-    def No_interp(self,smoothness=10):
+    def No_interp(self, smoothness=10):
         out_t=np.linspace(min(self.int_t),max(self.int_t),len(self.int_t)*smoothness)
         self.n_steps = int(np.ceil(len(out_t) / len(self.int_t)))
         self.out_t = out_t
 
         #This Function maps the input vecotor over the outuput time vector without interoplation
         if self.n_dims == 1: # if the input is only one row
-            self.eased = np.zeros((len(self.out_t), 1))
+            self.eased = np.zeros((self.out_t, 1))
             for i, t in enumerate(self.out_t):
                 self.eased[i] = self.data[int(np.floor(i / self.n_steps))]
         else: #if the input is a multidimensional row
-            self.eased = np.zeros((np.shape(self.data)[0], len(self.out_t)))
+            self.eased = np.zeros((np.shape(self.data)[0], self.out_t))
             for z in range(np.shape(self.data)[0]):
                 for i, t in enumerate(self.out_t):
                     self.eased[z, i] = self.data[z, int(np.floor(i / self.n_steps))]
@@ -54,12 +85,41 @@ class Eased:
 
 
     def power_ease(self, n, smoothness=10):
-        out_t = np.linspace( min(self.int_t), max(self.int_t), len(self.int_t)*smoothness )
-        self.n_steps = int( np.ceil(len(out_t) / len(self.int_t)) )
+        """
+        Takes care of interpolating (easing) the coordinates according to the 
+        given smoothness.
+
+        Parameters
+        ----------
+        n : TYPE
+            DESCRIPTION.
+        smoothness : TYPE, optional
+            DESCRIPTION. The default is 10.
+        wrap : bool, optional
+            Tells the easer whether wrap the animation back to the intial state. 
+            The default is True.
+        istall : bool, optional
+            Tells the easer whether to start the animation with a stall at the 
+            initial state. The default is False.
+        fstall : boll, optional
+            Tells the easer whether to end the animation with a stall at the 
+            final state. The default is True.
+
+        Returns
+        -------
+        TYPE
+            self.eased, an array of floats with states as rows and x- and y-
+            coordinates for each point as columns.
+
+        """
+        
+        out_t = len(self.int_t)*smoothness
         self.out_t = out_t
+        self.n_steps = int( np.ceil(self.out_t / len(self.int_t)) )
+        
         sign = n % 2 * 2
         if self.n_dims == 1:
-            self.eased = np.zeros((len(self.out_t), 1))
+            self.eased = np.zeros((self.out_t, 1))
             j = 0
             for i in range(len(self.int_t) - 1):
 
@@ -78,13 +138,14 @@ class Eased:
             self.eased[j:] = self.data[i + 1]
 
         else:
-            self.eased = np.zeros(( len(self.out_t),np.shape(self.data)[1]))
+            self.eased = np.zeros( (self.out_t, np.shape(self.data)[1]) )
             for z in range(np.shape(self.data)[1]):
                 j = 0
-                for i in range(len(self.int_t) - 1):
-
-                    start = self.data[ i,z]
-                    end = self.data[ i + 1,z]
+                
+                for i in range(len(self.int_t)):
+                    start = self.data[i, z]
+                    end = self.data[i + 1, z]
+                    
                     for t in np.linspace(0, 2, self.n_steps):
                         if (t < 1):
                             val = (end - start) / 2 * t ** n + start
@@ -93,9 +154,9 @@ class Eased:
                             t -= 2
                             val = (1 - sign) * (-(end - start) / 2) * (t ** n - 2 * (1 - sign)) + start
 
-                        self.eased[ j,z] = val
+                        self.eased[j, z] = val
                         j += 1
-                self.eased[ j:,z] = self.data[ i + 1,z]
+
 
         return self.eased
 
@@ -173,7 +234,7 @@ class Eased:
             else:
                 return dots
 
-        anim = animation.FuncAnimation(fig, animate, frames=len(self.out_t),interval=400/smoothness/speed, blit=False)
+        anim = animation.FuncAnimation(fig, animate, frames=self.out_t,interval=400/smoothness/speed, blit=False)
 
 
         if destination is not None:
@@ -189,7 +250,9 @@ class Eased:
             return anim
 
 
-    def polygon_animation2d(self,n=3,smoothness=30,speed=1.0,gif=False,destination=None,plot_kws=None,label=False):
+    def polygon_animation2d(self, n=3, smoothness=30, speed=1.0, 
+                            gif=False, destination=None, plot_kws=None, label=False
+                            ):
         """
         Create a 2d polygon plot animation.
 
@@ -268,7 +331,7 @@ class Eased:
             else:
                 return poly
 
-        anim = animation.FuncAnimation(fig, animate, frames=len(self.out_t),interval=400/smoothness/speed, blit=False)
+        anim = animation.FuncAnimation(fig, animate, frames=self.out_t,interval=400/smoothness/speed, blit=False)
 
 
         if destination is not None:
