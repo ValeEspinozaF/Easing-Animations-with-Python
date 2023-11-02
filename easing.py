@@ -6,6 +6,7 @@ rc('animation', html='html5')
 from IPython.display import HTML, Image
 from itertools import groupby
 from matplotlib.patches import Polygon
+import math
 
 
 class Eased:
@@ -14,7 +15,7 @@ class Eased:
     For the input data, the rows are the different variables and the columns 
     correspond to the time points"""
 
-    def __init__(self, data, in_t=None, wrap=True, istall=False, fstall=False):
+    def __init__(self, data, in_t=None, wrap=True):
         """
         Create a new instance of the class Eased().
 
@@ -27,12 +28,6 @@ class Eased:
         wrap : boolean, optional
             Tells the easer whether wrap the animation back to the intial state. 
             The default is True.
-        istall : boolean, optional
-            Tells the easer whether to start the animation with a stall at the 
-            initial state. The default is False.
-        fstall : boolean, optional
-            Tells the easer whether to end the animation with a stall at the 
-            final state. The default is True.
             
         Returns
         -------
@@ -66,14 +61,6 @@ class Eased:
         if wrap:
             in_t = np.append(in_t, in_t[:1])
             labels = np.append(labels, labels[:1])
-            
-        if istall:
-            in_t = np.append(in_t[:1], in_t)
-            labels = np.append(labels[:1], labels)
-            
-        if fstall:
-            in_t = np.append(in_t, in_t[-1:])
-            labels = np.append(labels, labels[-1:])
             
             
         self.labels = labels
@@ -120,7 +107,7 @@ class Eased:
         return self.eased
 
 
-    def power_ease(self, n, fpt=10):
+    def power_ease(self, n, fpt=10, istall=False, fstall=False):
         """
         Takes care of interpolating (easing) the coordinates according to the 
         given fpt.
@@ -131,6 +118,12 @@ class Eased:
             Exponent of the power smoothing.
         fpt : integer, optional
             Number of frames per transition. The default is 10.
+        istall : boolean, optional
+            Tells the easer whether to start the animation with a stall at the 
+            initial state. The default is False.
+        fstall : boolean, optional
+            Tells the easer whether to end the animation with a stall at the 
+            final state. The default is True.
 
         Returns
         -------
@@ -139,6 +132,14 @@ class Eased:
             coordinates for each point as columns.
 
         """
+        
+        if istall:
+            self.int_t = np.append(self.int_t[:1], self.int_t)
+            self.labels = np.append(self.labels[:1], self.labels)
+            
+        if fstall:
+            self.int_t = np.append(self.int_t, self.int_t[-1:])
+            self.labels = np.append(self.labels, self.labels[-1:])
         
         n_frames = (len(self.int_t)-1) * fpt
         self.n_frames = n_frames
@@ -187,6 +188,80 @@ class Eased:
 
         return self.eased
 
+
+    def overshoot_ease(self, freq=0.1, fpt=30, istall=False, fstall=False):
+        """
+        Takes care of interpolating (easing) the coordinates according to the 
+        given fpt.
+
+        Parameters
+        ----------
+        n : integer
+            Exponent of the power smoothing.
+        fpt : integer, optional
+            Number of frames per transition. The default is 10.
+        istall : boolean, optional
+            Tells the easer whether to start the animation with a stall at the 
+            initial state. The default is False.
+        fstall : boolean, optional
+            Tells the easer whether to end the animation with a stall at the 
+            final state. The default is True.
+
+        Returns
+        -------
+        Array of floats
+            An array of floats with states(frames) as rows and x- and y-
+            coordinates for each point as columns.
+
+        """
+
+        # Parameters for sine function
+        #frequency = 2 * math.pi / fpt
+        
+        # wait to implement and check for unwanted behaviour when stalling 
+# =============================================================================
+#         if istall:
+#             self.int_t = np.append(self.int_t[:1], self.int_t)
+#             self.labels = np.append(self.labels[:1], self.labels)
+#             
+#         if fstall:
+#             self.int_t = np.append(self.int_t, self.int_t[-1:])
+#             self.labels = np.append(self.labels, self.labels[-1:])
+# =============================================================================
+            
+        amp = 0.5
+        n_frames = (len(self.int_t)-1) * fpt
+        self.n_frames = n_frames
+        self.n_steps = int( np.ceil(self.n_frames / (len(self.int_t)-1)) )
+        
+
+        # Erased cade for n_dims == 1. Not sure the purpose.
+        
+        self.eased = np.zeros( (self.n_frames, np.shape(self.data)[1]) )
+        for z in range(np.shape(self.data)[1]): 
+            j = 0
+            
+            for i in range(len(self.int_t)-1): 
+                start = self.data[self.int_t[i], z]
+                end = self.data[self.int_t[i + 1], z]
+                delta = end - start
+                
+                
+                for frame in range(self.n_steps):
+                    
+                    if delta == 0:
+                        val = start
+                    
+                    else:
+                    
+                        t = frame * 100 / fpt
+                        val = delta * (1 - np.exp(-amp * freq * t)/(np.sqrt(1-amp**2)) * np.sin(np.sqrt(1-amp**2) * freq * t + np.arccos(amp))) + start
+                                        
+                    self.eased[j, z] = val
+                    j += 1
+
+
+        return self.eased
 
     def scatter_animation2d(self, n=3, fpt=30, speed=1.0, gif=False, destination=None,plot_kws=None,label=False):
         """
@@ -277,8 +352,9 @@ class Eased:
             return anim
 
 
-    def polygon_animation2d(self, n=3, fpt=30, speed=1.0, ease_method='power_ease',
-                            gif=False, destination=None, plot_kws=None, label=False):
+    def polygon_animation2d(self, n=3, fpt=30, speed=1.0, ease_method='power', 
+                            istall=False, fstall=False, gif=False, 
+                            destination=None, plot_kws=None, label=False):
         """
         Create a 2d polygon plot animation.
 
@@ -301,7 +377,13 @@ class Eased:
         speed : float, optional
             DESCRIPTION. The default is 1.0.
         ease_method : string, optional
-            Smooting method to be used. The default is 'power_ease'.
+            Smooting method to be used. The default is 'power'.
+        istall : boolean, optional
+            Tells the easer whether to start the animation with a stall at the 
+            initial state. The default is False.
+        fstall : boolean, optional
+            Tells the easer whether to end the animation with a stall at the 
+            final state. The default is True.
         gif : boolean, optional
             DESCRIPTION. The default is False.
         destination : string, optional
@@ -332,8 +414,10 @@ class Eased:
 
 
         # Ease data
-        if ease_method == "power_ease":
-            it_data = self.power_ease(n, fpt)
+        if ease_method == "power":
+            it_data = self.power_ease(n, fpt, istall, fstall)
+        elif ease_method == "overshoot":
+            it_data = self.overshoot_ease()
             
 
         # Fill missing plotting keywords (otherwise given in plot_kws)
