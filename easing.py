@@ -214,20 +214,14 @@ class Eased:
             coordinates for each point as columns.
 
         """
-
-        # Parameters for sine function
-        #frequency = 2 * math.pi / fpt
         
-        # wait to implement and check for unwanted behaviour when stalling 
-# =============================================================================
-#         if istall:
-#             self.int_t = np.append(self.int_t[:1], self.int_t)
-#             self.labels = np.append(self.labels[:1], self.labels)
-#             
-#         if fstall:
-#             self.int_t = np.append(self.int_t, self.int_t[-1:])
-#             self.labels = np.append(self.labels, self.labels[-1:])
-# =============================================================================
+        if istall:
+            self.int_t = np.append(self.int_t[:1], self.int_t)
+            self.labels = np.append(self.labels[:1], self.labels)
+            
+        if fstall:
+            self.int_t = np.append(self.int_t, self.int_t[-1:])
+            self.labels = np.append(self.labels, self.labels[-1:])
             
         amp = 0.5
         n_frames = (len(self.int_t)-1) * fpt
@@ -238,30 +232,48 @@ class Eased:
         # Erased cade for n_dims == 1. Not sure the purpose.
         
         self.eased = np.zeros( (self.n_frames, np.shape(self.data)[1]) )
-        for z in range(np.shape(self.data)[1]): 
-            j = 0
+        self.frame_label = [''] * self.n_frames
+        set_label = True
+        
+        for z in range(np.shape(self.data)[1]): # xy coordinates
             
-            for i in range(len(self.int_t)-1): 
+            for i in range(len(self.int_t)-1): # states
                 start = self.data[self.int_t[i], z]
                 end = self.data[self.int_t[i + 1], z]
                 delta = end - start
                 
                 
-                for frame in range(self.n_steps):
+                for frame in range(self.n_steps): # frames
                     
                     if delta == 0:
                         val = start
                     
                     else:
-                    
                         t = frame * 100 / fpt
                         val = delta * (1 - np.exp(-amp * freq * t)/(np.sqrt(1-amp**2)) * np.sin(np.sqrt(1-amp**2) * freq * t + np.arccos(amp))) + start
-                                        
-                    self.eased[j, z] = val
-                    j += 1
+                            
+                    self.eased[frame + fpt*i, z] = val
 
+                   
+                    
+                if set_label: # Set state labels based on coordinate position
+                    
+                    if self.int_t[i] != self.int_t[i+1] and delta != 0.0: 
+                        for frame in range(self.n_steps):
+                            
+                            if abs(self.eased[frame + fpt*i, z] - start) < abs(self.eased[frame + fpt*i, z] - end):
+                                self.frame_label[frame + fpt*i] = self.labels[i]
+                            else:
+                                self.frame_label[frame + fpt*i] = self.labels[i + 1]
+                            
+                    elif self.int_t[i] == self.int_t[i+1]:
+                        for frame in range(self.n_steps):
+                            self.frame_label[frame + fpt*i] = self.labels[i+1]
+                    
+                    set_label = not all(element != "" for element in self.frame_label)
 
         return self.eased
+
 
     def scatter_animation2d(self, n=3, fpt=30, speed=1.0, gif=False, destination=None,plot_kws=None,label=False):
         """
@@ -354,7 +366,8 @@ class Eased:
 
     def polygon_animation2d(self, n=3, fpt=30, speed=1.0, ease_method='power', 
                             istall=False, fstall=False, gif=False, 
-                            destination=None, plot_kws=None, label=False):
+                            destination=None, feat_kws=dict(), ax_kws=dict(), 
+                            label=False, label_kws=dict()):
         """
         Create a 2d polygon plot animation.
 
@@ -409,50 +422,39 @@ class Eased:
             print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)") # !!! when is this relevant
 
 
-        if plot_kws is None:
-            plot_kws = dict()
+        
 
 
         # Ease data
         if ease_method == "power":
             it_data = self.power_ease(n, fpt, istall, fstall)
         elif ease_method == "overshoot":
-            it_data = self.overshoot_ease()
+            it_data = self.overshoot_ease(istall=istall,fstall=fstall)
             
 
-        # Fill missing plotting keywords (otherwise given in plot_kws)
-        # !!! update with concerning keywords
-        # !!! Should perhaps divide into plot kws and polygon kws.
-        vanilla_params={'color':'black',
-                        'xlim':[np.min(it_data)-1, np.max(it_data)+1],
-                        'ylim':[np.min(it_data)-1,np.max(it_data)+1],
-                        'xlabel':'',
-                        'ylabel':'',
-                        'alpha':1.0,
-                        'figsize':(6,6),
-                        }
-        
-        for key in vanilla_params.keys():
-            if key not in plot_kws.keys():
-                plot_kws[key] = vanilla_params[key]
-
-
         # Set figure
-        fig, ax = plt.subplots(figsize=plot_kws['figsize'])
-        ax.set_xlim(plot_kws['xlim'])
-        ax.set_ylim(plot_kws['ylim'])
-        ax.set_xlabel(plot_kws['xlabel'])
-        ax.set_ylabel(plot_kws['ylabel'])
-
-
-        if label==True:
-            label_text = ax.text(plot_kws['xlim'][1]*0.75, plot_kws['ylim'][1]*.9, '',fontsize=18) # set later in the code with "set_text")
+        fig, ax = plt.subplots()   
+        
+        ax_kws_default={'xlim':[np.min(it_data)-1, np.max(it_data)+1],
+                        'ylim':[np.min(it_data)-1,np.max(it_data)+1],}
+        
+        ax_kws = {**ax_kws_default, **ax_kws}
+        ax.set(**ax_kws)
 
         
-        n_dots=int(np.shape(self.data)[1]/2) # because columns has stacked x and y, so only half the size of data 
-        poly = ax.add_patch(Polygon([[0,0]], fc=plot_kws['color'], alpha=plot_kws['alpha']))
-     
+        # Set feature
+        feat_kws_default={'facecolor' : 'black',
+                          'alpha' : 1.0}
+    
+        feat_kws = {**feat_kws_default, **feat_kws}
+        poly = ax.add_patch(Polygon([[0,0]], **feat_kws))
+        
+        if label:
+            label_text = ax.text(0, 0, '')
+        
 
+
+        n_dots = int(np.shape(self.data)[1]/2) # because columns has stacked x and y, so only half the size of data 
         def animate(z):
             dots = []
             for i in range(n_dots):
@@ -460,11 +462,23 @@ class Eased:
                 
             poly.set_xy(dots)
             
-            if label==True:
-                label_text.set_text(self.labels[int(np.floor((z+fpt/2)/fpt))])  #!!! This will only work for DataFrames I think
-                return poly,label_text
+            if label:
+                label_kws = {}
+                label_kws_default = {#"text" : self.labels[int(np.floor((z+fpt/2)/fpt))],
+                                     "text" : self.frame_label[z],
+                                     "horizontalalignment" : 'right',
+                                     "verticalalignment" : 'top',
+                                     "fontsize" : 18,
+                                     "position" : (ax_kws['xlim'][1]*0.75, ax_kws['ylim'][1]*.9)}
+                
+                label_kws = {**label_kws_default, **label_kws}
+                label_text.set(**label_kws)
+
+                return poly, label_text
+            
             else:
                 return poly
+
 
         anim = animation.FuncAnimation(fig, animate, frames=self.n_frames, 
                                        interval=400/fpt/speed, blit=False)
