@@ -245,7 +245,14 @@ class Eased:
         self.n_frames = n_frames
         self.n_steps = int( np.ceil(self.n_frames / (len(self.int_t)-1)) )
         
-
+        
+        # Save main frames
+        states = np.unique(self.int_t)
+        self.main_frames = []
+        for state in states:
+            idx = np.where(self.int_t == state)[0][0]
+            self.main_frames.append(self.n_steps * idx)
+        
         # Erased cade for n_dims == 1. Not sure the purpose.
         
         self.eased = np.zeros( (self.n_frames, np.shape(self.data)[1]) )
@@ -289,33 +296,50 @@ class Eased:
                     
                     set_label = not all(element != "" for element in self.frame_label)
 
-        return self
-
-
-    def scatter_animation2d(self, n=3, fpt=30, speed=1.0, destination=None, 
-                            plot_kws=None, label=False):
-        """
-        Flexibly create a 2d scatter plot animation.
-
-        This function creates a matplotlib animation from a pandas Dataframe or a MxN numpy array. The Columns are paired
-        with x and y coordinates while the rows are the individual time points.
-
-        If a DataFrame is passed, the data columns are expected to have the xy values for each point stacked in pairs.
-        You would get that from e.g.: w=np.random.multivariate_normal([1,1],[[4, 2], [2, 4]],size=size).reshape(1,-1)
-        where sampling is done for both axis in the same call.
+        return self        
         
-        This takes a number of parameters for the animation, as well as
+        
+
+    def scatter_animation2d(self, speed=1.0, 
+                            destination=None, save_main_frames=False, 
+                            feat_kws=dict(), ax_kws=dict(), 
+                            label=False, label_kws=dict()):
+        """
+        Create a 2d scatter plot animation.
+
+        This function creates a matplotlib animation from a pandas Dataframe 
+        or a MxN numpy array. The Columns are paired with x- and y-coordinates 
+        while the rows are the individual time points.
+
+        If a DataFrame is passed, the data columns are expected to have the xy 
+        values for each point stacked in pairs. You would get that from e.g.: 
+        w = np.random.multivariate_normal([1,1],[[4, 2], [2, 4]],size=size).reshape(1,-1)
+        where sampling is done for both axis in the same call.
 
 
         Parameters
         ----------
-        n: Exponent of the power smoothing
-        fpt: how smooth the frames of the animation are
-        speed: speed
-        inline:
-        gif:
-        destination:
-        :return:
+        speed : float, optional
+            DESCRIPTION. The default is 1.0.
+        destination : string, optional
+            Output path for the animation. The default is None.
+        save_main_frames : TYPE, optional
+            DESCRIPTION. The default is False.
+        feat_kws : dictionary, optional
+            Mpatches.Polygon keywords. The default is an empty dictionary.
+        ax_kws : dictionary, optional
+            Matplotlib.Axes keywords. The default is an empty dictionary.
+        label : boolean, optional
+            True for plotting labels in the plot. Labels can only be taken from
+            the keys of the dictionary passed as data. The default is False.
+        label_kws : dictionary, optional
+            Matplotlib.Text keywords. The default is an empty dictionary.
+
+        Returns
+        -------
+        FuncAnimation
+            Animation.
+
         """
 
 
@@ -327,46 +351,77 @@ class Eased:
             print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)") 
 
 
-        if plot_kws is None:
-            plot_kws = dict()
+        # Eased data
+        it_data = self.eased
+
+        # Set figure
+        fig, ax = plt.subplots()   
+        ax_kws_default={'xlim':[np.min(it_data)-1, np.max(it_data)+1],
+                        'ylim':[np.min(it_data)-1, np.max(it_data)+1],}
+        
+        ax_kws = {**ax_kws_default, **ax_kws}
+        ax.set(**ax_kws)
+
+        
+        # Set feature
+        feat_kws_default={'color' : 'black',
+                          'marker' : 'o',
+                          'markersize' : 5,
+                          'linestyle' : 'none',
+                          'alpha' : 1.0}
+    
+        feat_kws = {**feat_kws_default, **feat_kws}
 
 
-        it_data = self.power_ease(n,fpt)
-
-        # filling out missing keys
-        vanilla_params={'s':10,'color':'black','xlim':[np.min(it_data)-1, np.max(it_data)+1],'ylim':[np.min(it_data)-1,np.max(it_data)+1],'xlabel':'','ylabel':'','alpha':1.0,'figsize':(6,6)}
-        for key in vanilla_params.keys():
-            if key not in plot_kws.keys():
-                plot_kws[key] = vanilla_params[key]
-
-
-
-        fig, ax = plt.subplots(figsize=plot_kws['figsize'])
-        ax.set_xlim(plot_kws['xlim'])
-        ax.set_ylim(plot_kws['ylim'])
-        ax.set_xlabel(plot_kws['xlabel'])
-        ax.set_ylabel(plot_kws['ylabel'])
-
-        if label==True:
-            label_text = ax.text(plot_kws['xlim'][1]*0.75, plot_kws['ylim'][1]*.9, '',fontsize=18)
-
-        n_dots=int(np.shape(self.data)[1]/2) # because columns has stacked x and y, so only half the size of data are points.
-        dots=[]
+        n_dots = int(np.shape(self.data)[1]/2) # because columns has stacked x and y, so only half the size of data are points.
+        dots = []
         for i in range(n_dots):
-            dots.append(ax.plot([], [], linestyle='none', marker='o', markersize=plot_kws['s'], color=plot_kws['color'], alpha=plot_kws['alpha']))
-
+            dots.append(ax.plot([], [], **feat_kws))
+            
+            
+        if label:
+            label_text = ax.text(0, 0, '')
 
 
         def animate(z):
             for i in range(n_dots):
                 dots[i][0].set_data(it_data[z,i*2],it_data[z,i*2+1])
-            if label==True:
-                label_text.set_text(self.labels[int(np.floor((z+fpt/2)/fpt))])
-                return dots,label_text
+                
+            if label:
+                label_kws = {}
+                label_kws_default = {"text" : self.frame_label[z],
+                                     "horizontalalignment" : 'right',
+                                     "verticalalignment" : 'top',
+                                     "fontsize" : 18,
+                                     "position" : (ax_kws['xlim'][1]*0.95, ax_kws['ylim'][1]*0.95)}
+                
+                label_kws = {**label_kws_default, **label_kws}
+                label_text.set(**label_kws)
+                 
+                if save_main_frames != False and z in self.main_frames:
+                    idx = np.where(self.main_frames == z)[0][0]
+                    
+                    if isinstance(save_main_frames, str):
+                        plt.savefig(save_main_frames + str(idx) + ".png")
+                    else:
+                        plt.savefig(str(idx)+".png")
+                        
+                return dots, label_text
+            
             else:
+                if save_main_frames != False and z in self.main_frames:
+                    idx = np.where(self.main_frames == z)[0][0]
+                    
+                    if isinstance(save_main_frames, str):
+                        plt.savefig(save_main_frames + str(idx) + ".png")
+                    else:
+                        plt.savefig(str(idx)+".png")
+                        
                 return dots
 
-        anim = animation.FuncAnimation(fig, animate, frames=self.n_frames,interval=400/fpt/speed, blit=False)
+        anim = animation.FuncAnimation(fig, animate, frames=self.n_frames, 
+                                       interval=400/self.n_steps/speed, 
+                                       repeat=False, blit=False)
 
 
         if destination is not None:
@@ -376,13 +431,13 @@ class Eased:
                 anim.save(destination, writer=writer, dpi=100)
                 
             if destination.split('.')[-1]=='gif':
-                anim.save(destination, writer='imagemagick', fps=fpt)
+                anim.save(destination, writer='imagemagick', fps=self.n_steps)
 
-        
         return anim
 
 
-    def polygon_animation2d(self, speed=1.0, gif=False, destination=None, 
+    def polygon_animation2d(self, speed=1.0, 
+                            destination=None, save_main_frames=False,
                             feat_kws=dict(), ax_kws=dict(), 
                             label=False, label_kws=dict()):
         """
@@ -404,6 +459,10 @@ class Eased:
             DESCRIPTION. The default is 1.0.
         destination : string, optional
             Output path for the animation. The default is None.
+        save_main_frames : boolean, optional
+            Not False for saving as png the main and unique frames. This 
+            parameter may be set up as a string with the figure path to be used.
+            The default is False.
         feat_kws : dictionary, optional
             Mpatches.Polygon keywords. The default is an empty dictionary.
         ax_kws : dictionary, optional
@@ -434,9 +493,8 @@ class Eased:
 
         # Set figure
         fig, ax = plt.subplots()   
-        
         ax_kws_default={'xlim':[np.min(it_data)-1, np.max(it_data)+1],
-                        'ylim':[np.min(it_data)-1,np.max(it_data)+1],}
+                        'ylim':[np.min(it_data)-1, np.max(it_data)+1],}
         
         ax_kws = {**ax_kws_default, **ax_kws}
         ax.set(**ax_kws)
@@ -472,15 +530,32 @@ class Eased:
                 
                 label_kws = {**label_kws_default, **label_kws}
                 label_text.set(**label_kws)
-
+                
+                if save_main_frames != False and z in self.main_frames:
+                    idx = np.where(self.main_frames == z)[0][0]
+                    
+                    if isinstance(save_main_frames, str):
+                        plt.savefig(save_main_frames + str(idx) + ".png")
+                    else:
+                        plt.savefig(str(idx)+".png")
+                    
                 return poly, label_text
             
             else:
+                if save_main_frames != False and z in self.main_frames:
+                    idx = np.where(self.main_frames == z)[0][0]
+                    
+                    if isinstance(save_main_frames, str):
+                        plt.savefig(save_main_frames + str(idx) + ".png")
+                    else:
+                        plt.savefig(str(idx)+".png")
+                        
                 return poly
 
 
         anim = animation.FuncAnimation(fig, animate, frames=self.n_frames, 
-                                       interval=400/self.n_steps/speed, blit=False)
+                                       interval=400/self.n_steps/speed, 
+                                       repeat=False, blit=False)
 
 
         if destination is not None:
@@ -491,7 +566,6 @@ class Eased:
                 
             if destination.split('.')[-1]=='gif':
                 anim.save(destination, writer='imagemagick', fps=self.n_steps)
-
 
         return anim
 
