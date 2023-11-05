@@ -299,7 +299,9 @@ class Eased:
         return self        
         
         
-
+    
+    
+    
     def scatter_animation2d(self, speed=1.0, 
                             destination=None, save_main_frames=False, 
                             feat_kws=dict(), ax_kws=dict(), 
@@ -497,7 +499,7 @@ class Eased:
                         'ylim':[np.min(it_data)-1, np.max(it_data)+1],}
         
         ax_kws = {**ax_kws_default, **ax_kws}
-        ax.set(**ax_kws)
+        
 
         
         # Set feature
@@ -508,25 +510,27 @@ class Eased:
     
         feat_kws = {**feat_kws_default, **feat_kws}
         #lines = ax.plot(np.empty((0, y.shape[1])), np.empty((0, y.shape[1])), **feat_kws)
-        lines = ax.plot([], [], **feat_kws)
-            
+        
+        def add_line(ax):
+            return ax.plot([], [], **feat_kws)
+                
             
         if label:
             label_text = ax.text(0, 0, '')
 
 
         def animate(z):
-            
-            for line in lines:
-                x = np.zeros(n_dots)
-                y = np.zeros(n_dots)
-                for i in range(n_dots):
-                    x[i] = it_data[z, i*2]
-                    y[i] = it_data[z, i*2+1]
-                    
-                line.set_data(x, y)
-            
-            
+            ax.clear()
+            ax.set(**ax_kws)
+
+            x = np.zeros(n_dots)
+            y = np.zeros(n_dots)
+            for i in range(n_dots):
+                x[i] = it_data[z, i*2]
+                y[i] = it_data[z, i*2+1]
+                
+            ax.plot(x, y, **feat_kws)            
+
                 
             if label:
                 label_kws = {}
@@ -546,8 +550,6 @@ class Eased:
                         plt.savefig(save_main_frames + str(idx) + ".png")
                     else:
                         plt.savefig(str(idx)+".png")
-                        
-                return lines, label_text
             
             else:
                 if save_main_frames != False and z in self.main_frames:
@@ -558,7 +560,7 @@ class Eased:
                     else:
                         plt.savefig(str(idx)+".png")
                         
-                return lines
+        
 
         anim = animation.FuncAnimation(fig, animate, frames=self.n_frames, 
                                        interval=400/self.n_steps/speed, 
@@ -906,6 +908,190 @@ class Eased:
             return anim
 
 
+
+def animation2d(eased_list, anim_type, feats_kws=[],
+                    speed=1.0, destination=None, save_main_frames=False, 
+                    ax_kws=dict(), label=False, label_kws=dict()):
+
+
+        #Running checks on data for mishappen arrays.
+        for eased in eased_list:
+            
+            if np.shape(eased.data)[1]%2!=0:
+                print('\033[91m' + "Failed: Data must have an even number of columns")
+                exit()
+                
+            if np.shape(eased.data)[0] < np.shape(eased.data)[1]:
+                print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)") 
+            
+        if len(eased_list) != len(anim_type):
+            print('\033[91m' + "Failed: Data and animation type lists must have the same length")
+            exit()
+            
+        n_frames_list = [eased.n_frames for eased in eased_list]
+        if len(set(n_frames_list)) != 1:
+            print('\033[91m' + "Warning: N_frames accross Eased() instances is not the same length")
+            
+        n_steps_list = [eased.n_steps for eased in eased_list]
+        if len(set(n_steps_list)) != 1:
+            print('\033[91m' + "Warning: N_steps accross Eased() instances is not the same length")
+            
+            
+        n_feat = len(eased_list)
+        
+        
+        # Set figure
+        fig, ax = plt.subplots()   
+        xlims = np.zeros([n_feat,2]) 
+        ylims = np.zeros([n_feat,2]) 
+        
+        for i, eased_ in enumerate(eased_list):
+            
+            # Eased data
+            it_data = eased_.eased
+    
+            
+            xlims[i, :] = np.min(it_data)-1, np.max(it_data)+1
+            ylims[i, :] = np.min(it_data)-1, np.max(it_data)+1
+            
+            # Set feature
+            if anim_type[i] == "scatter":
+                feat_kws_default={'color' : 'black',
+                                  'marker' : 'o',
+                                  'markersize' : 5,
+                                  'linestyle' : 'none',
+                                  'alpha' : 1.0}
+                
+            elif anim_type[i] == "line":
+                feat_kws_default={'color' : 'black',
+                                  'linestyle' : '-',
+                                  'linewidth' : 1.0,
+                                  'alpha' : 1.0}
+            
+            elif anim_type[i] == "polygon":
+                feat_kws_default={'facecolor' : 'black',
+                                  'alpha' : 1.0}
+                
+            else:
+                print('\033[91m' + "Failed: Unrecognised animation type, options are scatter, line or polygon")
+                exit()
+                
+            
+            if feats_kws:
+                feats_kws[i] = {**feat_kws_default, **feats_kws[i]}
+            else:
+                feats_kws[i] = feat_kws_default
+        
+
+        ax_kws_default={'xlim':[np.min(xlims[:,0])-1, np.max(xlims[:,1])+1],
+                        'ylim':[np.min(ylims[:,0])-1, np.max(ylims[:,1])+1],}
+        
+        ax_kws = {**ax_kws_default, **ax_kws}
+
+
+        n_dots_list = [int(np.shape(eased_.data)[1]/2) for eased_ in eased_list]
+        
+# =============================================================================
+#         # SCATTER
+#         n_dots = int(np.shape(self.data)[1]/2)
+#         dots = []
+#         for i in range(n_dots):
+#             dots.append(ax.plot([], [], **feat_kws))
+#             
+# ============================================================================= 
+        
+            
+        if label:
+            label_text = ax.text(0, 0, '')
+
+
+        def animate(z):
+            ax.clear()
+            ax.set(**ax_kws)
+
+            for i, eased_ in enumerate(eased_list):
+                
+                it_data = eased_.eased
+                
+# =============================================================================
+#                 if anim_type[i] == "scatter":
+#                     for i in range(n_dots):
+#                         dots[i][0].set_data(it_data[z,i*2],it_data[z,i*2+1])
+# =============================================================================
+                    
+                    
+                if anim_type[i] == "line":
+                    x = np.zeros(n_dots_list[i])
+                    y = np.zeros(n_dots_list[i])
+                    for ik in range(n_dots_list[i]):
+                        x[ik] = it_data[z, ik*2]
+                        y[ik] = it_data[z, ik*2+1]
+                        
+                    ax.plot(x, y, **feats_kws[i])  
+                    
+                
+                
+                elif anim_type[i] == "polygon":
+                    dots = []
+                    for ij in range(n_dots_list[i]):
+                        dots.append([it_data[z,ij*2], it_data[z,ij*2+1]])
+                        
+                    poly = ax.add_patch(Polygon([[0,0]], **feats_kws[i]))
+                    poly.set_xy(dots)
+                
+            
+                
+            if label and isinstance(label, list):
+                label_kws = {}
+                label_kws_default = {"text" : label[z],
+                                     "horizontalalignment" : 'right',
+                                     "verticalalignment" : 'top',
+                                     "fontsize" : 18,
+                                     "position" : (ax_kws['xlim'][1]*0.95, ax_kws['ylim'][1]*0.95)}
+                
+                label_kws = {**label_kws_default, **label_kws}
+                label_text.set(**label_kws)
+                 
+# =============================================================================
+#                 if save_main_frames != False and z in self.main_frames:
+#                     idx = np.where(self.main_frames == z)[0][0]
+#                     
+#                     if isinstance(save_main_frames, str):
+#                         plt.savefig(save_main_frames + str(idx) + ".png")
+#                     else:
+#                         plt.savefig(str(idx)+".png")
+# =============================================================================   
+            
+            else:
+# =============================================================================
+#                 if save_main_frames != False and z in self.main_frames:
+#                     idx = np.where(self.main_frames == z)[0][0]
+#                     
+#                     if isinstance(save_main_frames, str):
+#                         plt.savefig(save_main_frames + str(idx) + ".png")
+#                     else:
+#                         plt.savefig(str(idx)+".png")
+# =============================================================================
+                        
+                pass
+            
+        
+
+        anim = animation.FuncAnimation(fig, animate, frames=eased_list[0].n_frames, 
+                                       interval=400/eased_list[0].n_steps/speed, 
+                                       repeat=False, blit=False)
+
+
+        if destination is not None:
+            
+            if destination.split('.')[-1]=='mp4':
+                writer = animation.writers['ffmpeg'](fps=60)
+                anim.save(destination, writer=writer, dpi=100)
+                
+            if destination.split('.')[-1]=='gif':
+                anim.save(destination, writer='imagemagick', fps=eased_list[0].n_steps)
+
+        return anim
 
 if __name__ == "__main__":
     
