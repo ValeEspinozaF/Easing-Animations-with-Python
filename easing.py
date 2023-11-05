@@ -436,6 +436,146 @@ class Eased:
         return anim
 
 
+    def polyline_animation2d(self, speed=1.0, 
+                             destination=None, save_main_frames=False, 
+                             feat_kws=dict(), ax_kws=dict(), 
+                             label=False, label_kws=dict()):
+        """
+        Create a 2d line plot animation.
+
+        This function creates a matplotlib animation from a pandas Dataframe 
+        or a MxN numpy array. The Columns are paired with x- and y-coordinates 
+        while the rows are the individual time points.
+
+        If a DataFrame is passed, the data columns are expected to have the xy 
+        values for each point stacked in pairs. You would get that from e.g.: 
+        w = np.random.multivariate_normal([1,1],[[4, 2], [2, 4]],size=size).reshape(1,-1)
+        where sampling is done for both axis in the same call.
+
+
+        Parameters
+        ----------
+        speed : float, optional
+            DESCRIPTION. The default is 1.0.
+        destination : string, optional
+            Output path for the animation. The default is None.
+        save_main_frames : TYPE, optional
+            DESCRIPTION. The default is False.
+        feat_kws : dictionary, optional
+            Mpatches.Polygon keywords. The default is an empty dictionary.
+        ax_kws : dictionary, optional
+            Matplotlib.Axes keywords. The default is an empty dictionary.
+        label : boolean, optional
+            True for plotting labels in the plot. Labels can only be taken from
+            the keys of the dictionary passed as data. The default is False.
+        label_kws : dictionary, optional
+            Matplotlib.Text keywords. The default is an empty dictionary.
+
+        Returns
+        -------
+        FuncAnimation
+            Animation.
+
+        """
+
+
+        #Running checks on data for mishappen arrays.
+        if np.shape(self.data)[1]%2!=0:
+            print('\033[91m' + "Failed: Data must have an even number of columns")
+            exit()
+        if np.shape(self.data)[0]<np.shape(self.data)[1]:
+            print('\033[91m' + "Warning : Data has more columns (xys) than rows (time)") 
+
+
+        # Eased data
+        it_data = self.eased
+        n_dots = int(np.shape(self.data)[1]/2) 
+
+        # Set figure
+        fig, ax = plt.subplots()   
+        ax_kws_default={'xlim':[np.min(it_data)-1, np.max(it_data)+1],
+                        'ylim':[np.min(it_data)-1, np.max(it_data)+1],}
+        
+        ax_kws = {**ax_kws_default, **ax_kws}
+        ax.set(**ax_kws)
+
+        
+        # Set feature
+        feat_kws_default={'color' : 'black',
+                          'linestyle' : '-',
+                          'linewidth' : 1.0,
+                          'alpha' : 1.0}
+    
+        feat_kws = {**feat_kws_default, **feat_kws}
+        #lines = ax.plot(np.empty((0, y.shape[1])), np.empty((0, y.shape[1])), **feat_kws)
+        lines = ax.plot([], [], **feat_kws)
+            
+            
+        if label:
+            label_text = ax.text(0, 0, '')
+
+
+        def animate(z):
+            
+            for line in lines:
+                x = np.zeros(n_dots)
+                y = np.zeros(n_dots)
+                for i in range(n_dots):
+                    x[i] = it_data[z, i*2]
+                    y[i] = it_data[z, i*2+1]
+                    
+                line.set_data(x, y)
+            
+            
+                
+            if label:
+                label_kws = {}
+                label_kws_default = {"text" : self.frame_label[z],
+                                     "horizontalalignment" : 'right',
+                                     "verticalalignment" : 'top',
+                                     "fontsize" : 18,
+                                     "position" : (ax_kws['xlim'][1]*0.95, ax_kws['ylim'][1]*0.95)}
+                
+                label_kws = {**label_kws_default, **label_kws}
+                label_text.set(**label_kws)
+                 
+                if save_main_frames != False and z in self.main_frames:
+                    idx = np.where(self.main_frames == z)[0][0]
+                    
+                    if isinstance(save_main_frames, str):
+                        plt.savefig(save_main_frames + str(idx) + ".png")
+                    else:
+                        plt.savefig(str(idx)+".png")
+                        
+                return lines, label_text
+            
+            else:
+                if save_main_frames != False and z in self.main_frames:
+                    idx = np.where(self.main_frames == z)[0][0]
+                    
+                    if isinstance(save_main_frames, str):
+                        plt.savefig(save_main_frames + str(idx) + ".png")
+                    else:
+                        plt.savefig(str(idx)+".png")
+                        
+                return lines
+
+        anim = animation.FuncAnimation(fig, animate, frames=self.n_frames, 
+                                       interval=400/self.n_steps/speed, 
+                                       repeat=False, blit=False)
+
+
+        if destination is not None:
+            
+            if destination.split('.')[-1]=='mp4':
+                writer = animation.writers['ffmpeg'](fps=60)
+                anim.save(destination, writer=writer, dpi=100)
+                
+            if destination.split('.')[-1]=='gif':
+                anim.save(destination, writer='imagemagick', fps=self.n_steps)
+
+        return anim
+    
     def polygon_animation2d(self, speed=1.0, 
                             destination=None, save_main_frames=False,
                             feat_kws=dict(), ax_kws=dict(), 
@@ -526,7 +666,7 @@ class Eased:
                                      "horizontalalignment" : 'right',
                                      "verticalalignment" : 'top',
                                      "fontsize" : 18,
-                                     "position" : (ax_kws['xlim'][1]*0.75, ax_kws['ylim'][1]*.9)}
+                                     "position" : (ax_kws['xlim'][1]*0.95, ax_kws['ylim'][1]*0.95)}
                 
                 label_kws = {**label_kws_default, **label_kws}
                 label_text.set(**label_kws)
