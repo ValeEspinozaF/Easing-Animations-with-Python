@@ -42,8 +42,10 @@ class Eased:
         if not all(isinstance(item, int) for item in in_t):
             raise TypeError("in_t must be a list of integers")
         
-        
         if isinstance(data, pd.DataFrame):
+            
+            if data.dtypes.nunique() != 1:
+                raise TypeError("Data must have the same data type")
             
             self.columns = data.columns
             
@@ -52,7 +54,9 @@ class Eased:
             
             labels = data.index.values[in_t]
             
-            if isinstance(data.loc[data.index[0]][0], plt.Rectangle):
+            """
+            if isinstance(data.loc[data.index[0]][0], plt.Rectangle):   # Get this documented
+                
                 coords = np.zeros((len(data), 4*2))
                 for z_, row in data.iterrows():
                     z = list(data.index).index(z_)
@@ -67,10 +71,9 @@ class Eased:
                 data = coords
                 
                 
-            elif isinstance(data.loc[data.index[0]][0], quiver.Quiver):
+            elif isinstance(data.loc[data.index[0]][0], quiver.Quiver): # Get this documented
+                
                 coords = []
-                
-                
                 for z_, row in data.iterrows():
                     coords_z = []
                     z = list(data.index).index(z_)
@@ -82,15 +85,19 @@ class Eased:
                     
                     coords.append(coords_z)
                 data = np.array(coords)
-                
+            """    
             
-            elif isinstance(data.loc[data.index[0]][0], float):
+            if np.issubdtype(data.dtypes[0], np.integer):
+                data = data.astype('float')
+                data = data.values
+                
+            elif np.issubdtype(data.dtypes[0], np.floating):
                 data = data.values            
             
         
         elif isinstance(data, np.ndarray):
             
-            if in_t is None:
+            if not in_t:
                 in_t = np.arange(np.shape(data)[0])
                 
             labels = [""] * len(in_t) # with new approach, otherwise +1
@@ -187,12 +194,14 @@ class Eased:
         self._assign_main_frames()
         self.eased = np.zeros( (self.n_frames, np.shape(self.data)[1]) )
         self.frame_label = [''] * self.n_frames
+               
+        
         
         set_label = True
         for z in range(np.shape(self.data)[1]): # xy coordinates
             for i in range(len(self.int_t)-1):  # states
                 for frame in range(self.n_steps): # frames
-                    self.eased[frame + fpt*i, z] = self.data[int(np.round(frame / self.n_steps)+i), z]
+                    self.eased[frame + fpt*i, z] = self.data[self.int_t[int(np.round(frame / self.n_steps)+i)], z]
                     
                 if set_label: 
                     start = self.data[self.int_t[i], z]
@@ -605,201 +614,6 @@ class Eased:
         return anim
 
 
-    # Not mantained
-    def barchart_animation(self, n=3, fpt=30, speed=1.0, gif=False, 
-                           destination=None, plot_kws=None, label=False, 
-                           zero_edges=True, loop=True):
-        '''
-        This barchart animation create line barcharts that morph over time using the eased data class
-
-        It takes the following additional arguments
-        :param n: this is the power curve modifier to passed to power_ease
-        :param fpt: this is a rendering parameter that determines the relative framerate over the animation
-        :param speed: How quickly does the animation unfold // a value of 1 indicates the default [R>0]
-
-        :param destination: This is the output file (if none it will be displayed inline for jupyter notebooks) - extension determines filetype
-
-
-        :param plot_kws: These are the matplotlib key work arghuments that can be passed in the event the defaults don't work great
-        :param label: This is an optional paramter that will display labels of the pandas rows as the animation cycles through
-
-        :return: rendered animation
-        '''
-
-
-
-        it_data = self.power_ease(n, fpt)
-
-        x_vect=np.arange(len(self.columns))
-
-
-        ### running checks on the paramters
-
-        #Runing checks on parameters
-        assert speed>0, "Speed value must be greater than zero"
-
-
-        # filling out missing keys
-        vanilla_params = {'s': 10, 'color': 'black', 'xlim': [min(x_vect) - 1, max(x_vect) + 1],
-                          'ylim': [np.min(it_data) - 1, np.max(it_data) + 1], 'xlabel': '', 'ylabel': '','title': '',
-                          'alpha': 1.0, 'figsize': (6, 6)}
-        for key in vanilla_params.keys():
-            if key not in plot_kws.keys():
-                plot_kws[key] = vanilla_params[key]
-
-        fig, ax = plt.subplots(figsize=plot_kws['figsize'])
-        ax.set_xlim(plot_kws['xlim'])
-        ax.set_ylim(plot_kws['ylim'])
-        ax.set_title(plot_kws['title'])
-        ax.set_xlabel(plot_kws['xlabel'])
-        ax.set_ylabel(plot_kws['ylabel'])
-        ax.set_xticks(x_vect-np.mean(np.diff(x_vect))/2)
-        ax.set_xticklabels(list(self.columns),rotation=90)
-
-        plt.tight_layout()
-        if label == True:
-            label_text = ax.text(plot_kws['xlim'][1] * 0.25, plot_kws['ylim'][1] * .9, '', fontsize=18)
-
-        lines=[]
-        lines.append(ax.plot([], [], linewidth=3, drawstyle='steps-pre', color=plot_kws['color'], alpha=plot_kws['alpha']))
-
-
-        # add zero padding to the data // makes for prettier histogram presentation
-        if zero_edges==True:
-            zero_pad=np.zeros((it_data.shape[0],1))
-            it_data=np.hstack((zero_pad,it_data,zero_pad))
-            x_vect=[min(x_vect)-1]+list(x_vect)+[max(x_vect)+1]
-
-        def animate(z):
-            lines[0][0].set_data(x_vect, it_data[z, :])
-
-            if label==True:
-                label_text.set_text(self.labels[int(np.floor((z+fpt/2)/fpt))])
-                return lines,label_text
-            else:
-                return lines
-
-
-        anim = animation.FuncAnimation(fig, animate, frames=it_data.shape[0],interval=400/fpt/speed, blit=False)
-
-
-        if destination is not None:
-            if destination.split('.')[-1]=='mp4':
-                writer = animation.writers['ffmpeg'](fps=60)
-                anim.save(destination, writer=writer, dpi=100)
-            if destination.split('.')[-1]=='gif':
-                anim.save(destination, writer='imagemagick', fps=fpt)
-
-        if gif==True:
-            return Image(url='animation.gif')
-        else:
-            return anim
-
-
-    # Not mantained
-    def timeseries_animation(self, n=1, speed=1.0, interp_freq=0, 
-                             starting_pos = 25, gif=False, destination=None,
-                             plot_kws=None, final_dist=False):
-        '''
-        This method creates a timeseiers animation of ergodic processes
-        :param fpt:
-        :param speed:
-        :param interp_freq: This is the number of steps between each given datapoint interp_freq=1 // no additional steps
-        :param gif:
-        :param destination:
-        :param plot_kws:
-        :param label:
-        :param zero_edges:
-        :param loop:
-        :return:
-        '''
-        interp_freq+=1
-
-        data = self.power_ease(n=n, fpt=interp_freq)
-
-        assert min(data.shape)==1, "timeseries animation only take 1 dimensional arrays"
-
-        data=[k for k, g in groupby(list(data))]
-
-        fig, ax = plt.subplots(1, 2, figsize=(12, 4),gridspec_kw={'width_ratios': [3, 1]},sharey=True)
-
-
-
-        max_steps=len(data)
-
-
-        vanilla_params = {'s': 10, 'color': 'black', 'xlim': [0, starting_pos],
-                          'ylim': [np.min(data) - 1, np.max(data) + 1], 'xlabel': '', 'ylabel': '','title': '',
-                          'alpha': 1.0, 'figsize': (12, 3),'linestyle':'none','marker':'o'}
-        if plot_kws==None:
-            plot_kws={}
-        x_vect=np.linspace(1,starting_pos,starting_pos*interp_freq)
-
-        # Creating NaN padding at the end for time series plot
-        data = np.append(data, x_vect * np.nan)
-
-        # fill out parameters
-        for key in vanilla_params.keys():
-            if key not in plot_kws.keys():
-                plot_kws[key] = vanilla_params[key]
-
-        ax[0].set_ylim(plot_kws['ylim'])
-        ax[1].set_ylim(plot_kws['ylim'])
-
-        ax[0].set_xlim(plot_kws['xlim'])
-        lines=[]
-        lines.append(ax[0].plot([], [], linewidth=3, color=plot_kws['color'], alpha=plot_kws['alpha'],linestyle=plot_kws['linestyle'], marker=plot_kws['marker']))
-        if 'bins' not in plot_kws.keys():
-            plot_kws['bins']=np.linspace(plot_kws['ylim'][0],plot_kws['ylim'][1],20)
-
-
-        #plotting light grey final dist:
-        if final_dist==True:
-            bins, x = np.histogram(data,bins=plot_kws['bins'])
-            ax[1].plot(bins, x[1:], linewidth=3, drawstyle='steps-pre', color='#d3d3d3')
-
-        else:
-            bins, x = np.histogram(data,bins=plot_kws['bins'])
-            ax[1].plot(bins, x[1:], linewidth=3, drawstyle='steps-pre', color='#d3d3d3',alpha=0)
-
-
-        histlines=[]
-        histlines.append(ax[1].plot([], [], linewidth=3,  drawstyle='steps-pre',color=plot_kws['color'], alpha=plot_kws['alpha']))
-
-
-        # This function plots the distribution of flowing information // so we start at the beining and plot forward
-        # reverse the orientation of data
-        trace_data=data[::-1]
-
-
-        def animate(z):
-            lines[0][0].set_data(x_vect, trace_data[-(starting_pos*interp_freq+1)-z:-1-z])
-
-            # compute the histogram of what what has passed
-            if z>0:
-                bins, x = np.histogram(trace_data[-(z):-1],bins=plot_kws['bins'])
-                histlines[0][0].set_data(bins,x[1:])
-                lines.append(ax[1].plot([], [], linewidth=3, color=plot_kws['color'], alpha=plot_kws['alpha']))
-
-
-            return lines
-
-
-        anim = animation.FuncAnimation(fig, animate, frames=max_steps,interval=400/speed, blit=False)
-
-
-        if destination is not None:
-            if destination.split('.')[-1]=='mp4':
-                writer = animation.writers['ffmpeg'](fps=60)
-                anim.save(destination, writer=writer, dpi=100)
-            if destination.split('.')[-1]=='gif':
-                anim.save(destination, writer='imagemagick', fps=30)
-
-        if gif==True:
-            return Image(url='animation.gif')
-        else:
-            return anim
-
 
 def _anim_points(ax, z, data, n_dots, feat_kws=dict()):
     xy = np.zeros([n_dots, 2])
@@ -968,7 +782,7 @@ def animation2d(eased_list, anim_type,
         
         if feats_kws:
             if len(feats_kws) != len(eased_list):
-                raise ValueError ("Failed: If give, feats_kws must have the same length as eased_list")
+                raise ValueError ("Failed: If given, feats_kws must have the same length as eased_list")
             else:
                 feats_kws[i] = {**feat_kws_default, **feats_kws[i]}
 
